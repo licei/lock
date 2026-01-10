@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>THE WATCHING — SECRET ARCHIVE (PERSONAL)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:#b00000;font-family:monospace;overflow:hidden}
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.88);display:none;z-index:10}
+#archive{position:fixed;inset:40px;border:1px solid #600;background:#020;display:none;z-index:11;padding:12px}
+#archive h2{margin:0 0 8px 0;color:#ff4444}
+#archive .list{height:70vh;overflow:auto;border:1px solid #600;padding:6px}
+#closeA{position:absolute;top:8px;right:8px}
+#eye{position:fixed;top:40%;left:50%;transform:translate(-50%,-50%);width:220px;height:220px;border-radius:50%;background:#700;box-shadow:0 0 60px #900}
+#pupil{width:70px;height:70px;background:#000;border-radius:50%;position:absolute;top:75px;left:75px}
+#ui{position:fixed;left:0;right:0;bottom:0;background:#050505;border-top:1px solid #600;padding:8px}
+#messages{height:200px;overflow-y:auto;border:1px solid #600;padding:6px;margin:6px 0}
+.msg .who{color:#ff4444}
+.msg .time{opacity:.6;font-size:11px;margin-left:6px}
+input,button{background:#000;color:#b00000;border:1px solid #600;padding:6px}
+</style>
+</head>
+<body>
+
+<div id="eye"><div id="pupil"></div></div>
+
+<div id="overlay"></div>
+<div id="archive">
+  <button id="closeA">закрыть</button>
+  <h2>ЛИЧНЫЙ АРХИВ</h2>
+  <div class="list" id="archiveList"></div>
+</div>
+
+<div id="ui">
+  <div id="messages"></div>
+  <input id="text" placeholder="сообщение (секрет: /archive)">
+  <button onclick="send()">SEND</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+/* === FIREBASE CONFIG (ALREADY INSERTED) === */
+const firebaseConfig = {
+  apiKey: "AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
+  authDomain: "licei-47857.firebaseapp.com",
+  databaseURL: "https://licei-47857-default-rtdb.firebaseio.com",
+  projectId: "licei-47857",
+  storageBucket: "licei-47857.firebasestorage.app",
+  messagingSenderId: "693615263006",
+  appId: "1:693615263006:web:e9309536d58ae848b49d0f"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+/* === FIXED IDENTITY PER DEVICE === */
+let name = localStorage.getItem('entity_name');
+if(!name){
+  name = 'entity_' + Math.random().toString(36).slice(2,9);
+  localStorage.setItem('entity_name', name);
+}
+
+/* === EYE FOLLOW === */
+addEventListener('mousemove', e => {
+  const x = (e.clientX / innerWidth - .5) * 60;
+  const y = (e.clientY / innerHeight - .5) * 60;
+  pupil.style.transform = `translate(${x}px,${y}px)`;
+});
+
+/* === TIME FORMAT === */
+function fmt(t){
+  const d = new Date(t || Date.now());
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+}
+
+/* === PUBLIC CHAT (HALL) === */
+const ref = db.ref('rooms/hall');
+ref.limitToLast(200).on('child_added', s => {
+  const m = s.val();
+  messages.innerHTML += `<div class="msg"><span class="who">[${m.name}]</span> ${m.text}<span class="time">${fmt(m.time)}</span></div>`;
+  messages.scrollTop = 9999;
+});
+
+/* === SEND MESSAGE === */
+function send(){
+  const t = text.value.trim();
+  if(!t) return;
+  if(t === '/archive'){
+    openArchive();
+    text.value = '';
+    return;
+  }
+  ref.push({ name, text: t, time: Date.now() });
+  text.value = '';
+}
+
+/* === SECRET PERSONAL ARCHIVE === */
+function openArchive(){
+  overlay.style.display = 'block';
+  archive.style.display = 'block';
+  archiveList.innerHTML = '<em>записи, оставленные тобой…</em><br>';
+
+  // Rooms
+  db.ref('rooms').once('value', snap => {
+    snap.forEach(room => {
+      room.forEach(msg => {
+        const m = msg.val();
+        if(m && m.name === name){
+          archiveList.innerHTML +=
+            `<div>(${room.key}) ${m.text} <span class="time">${fmt(m.time)}</span></div>`;
+        }
+      });
+    });
+  });
+
+  // Private chats
+  db.ref('private').once('value', snap => {
+    snap.forEach(chat => {
+      chat.forEach(msg => {
+        const m = msg.val();
+        if(m && m.name === name){
+          archiveList.innerHTML +=
+            `<div>(private) ${m.text} <span class="time">${fmt(m.time)}</span></div>`;
+        }
+      });
+    });
+  });
+}
+
+closeA.onclick = () => {
+  overlay.style.display = 'none';
+  archive.style.display = 'none';
+};
+</script>
+</body>
+</html>
