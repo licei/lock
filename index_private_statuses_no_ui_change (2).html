@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>THE WATCHING — Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+ --bg:#000;--panel:#050505;--accent:#b30000;
+ --line:#300;--text:#e6e6e6;
+ --my1:#2a0000;--my2:#120000
+}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--text);font-family:system-ui,monospace;overflow-x:hidden}
+
+/* ===== UI НЕ МЕНЯЛСЯ ===== */
+
+#top{
+ position:fixed;top:0;left:0;right:0;z-index:5;
+ display:flex;align-items:center;gap:8px;
+ padding:6px 8px;background:#000;border-bottom:1px solid var(--line)
+}
+#centerSearch{flex:1;text-align:center}
+#centerSearch input{
+ width:180px;background:#000;color:#eee;
+ border:1px solid var(--line);border-radius:8px;padding:4px;font-size:12px
+}
+button{
+ background:#000;color:#ff6b6b;border:1px solid var(--accent);
+ border-radius:8px;padding:4px 8px;font-size:12px
+}
+#statusLine{
+ font-size:11px;color:#aaa;white-space:nowrap
+}
+
+/* PRIVATE PANEL */
+#privatePanel{
+ position:fixed;top:42px;left:0;bottom:0;width:165px;
+ background:var(--panel);border-right:1px solid var(--line);
+ transform:translateX(-100%);transition:.25s;z-index:4;
+ padding:6px;overflow-y:auto
+}
+#privatePanel.open{transform:translateX(0)}
+.pItem{
+ display:flex;gap:6px;padding:4px;border-bottom:1px dashed #200;
+ cursor:pointer;align-items:center
+}
+.avatar{
+ width:20px;height:20px;border-radius:50%;
+ background-size:cover;background-position:center;flex-shrink:0
+}
+.pName{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* CHAT */
+#chat{
+ position:fixed;left:0;right:0;bottom:0;top:42px;
+ display:flex;flex-direction:column
+}
+#messages{
+ flex:1;overflow-y:auto;overflow-x:hidden;padding:8px
+}
+
+/* MESSAGE */
+.msg{width:100%;display:flex;margin-bottom:6px}
+.msg.me{justify-content:flex-end}
+
+.bubble{
+ display:inline-flex;flex-direction:column;
+ width:fit-content;max-width:78%;
+ background:#080808;border:1px solid var(--line);
+ border-radius:10px;padding:4px 6px;
+ white-space:pre-wrap;word-break:break-word;
+ line-height:1.15;font-size:12px
+}
+.msg.me .bubble{
+ background:linear-gradient(180deg,var(--my1),var(--my2));
+ border:1px solid #550000
+}
+.meta{
+ display:flex;align-items:center;gap:4px;
+ font-size:9px;color:#999;margin-top:2px;line-height:1.1
+}
+.read{color:#6cff6c}
+.nick{cursor:pointer;color:#ff9a9a}
+
+/* INPUT */
+#inputBar{
+ display:flex;gap:6px;padding:6px;border-top:1px solid var(--line)
+}
+textarea{
+ flex:1;background:#000;color:#eee;border:1px solid var(--line);
+ border-radius:8px;padding:6px;resize:none;
+ min-height:36px;max-height:120px;font-size:12px
+}
+
+/* PROFILE */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:9}
+#profile{
+ position:fixed;top:52px;right:8px;width:230px;
+ background:#050505;border:1px solid var(--accent);
+ border-radius:10px;padding:8px;display:none;z-index:10
+}
+#profileAvatar{
+ width:64px;height:64px;border-radius:50%;
+ background:#111;background-size:cover;background-position:center;
+ border:1px solid var(--line);margin-bottom:6px
+}
+</style>
+</head>
+<body>
+
+<div id="top">
+ <button onclick="togglePrivate()">☰</button>
+ <button onclick="goPublic()">Общий</button>
+ <div id="centerSearch">
+  <input id="search" placeholder="поиск по ID" onkeydown="if(event.key==='Enter')searchUser()">
+ </div>
+ <div id="statusLine"></div>
+ <button onclick="openProfile()">Профиль</button>
+</div>
+
+<div id="privatePanel"></div>
+
+<div id="chat">
+ <div id="messages"></div>
+ <div id="inputBar">
+  <textarea id="text" maxlength="500" placeholder="сообщение…" oninput="autoGrow(this);typing()"></textarea>
+  <button onclick="send()">▶</button>
+ </div>
+</div>
+
+<div id="overlay" onclick="closeProfile()"></div>
+<div id="profile">
+ <b>Профиль</b><br><br>
+ <div id="profileAvatar"></div>
+ <input type="file" accept="image/*" onchange="uploadAvatar(this)"><br><br>
+ <div><small>ID</small><br><b id="pid"></b></div><br>
+ <div><small>Ник</small></div>
+ <input id="nickInput">
+ <button onclick="saveNick()">Сохранить</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+ apiKey:"AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
+ databaseURL:"https://licei-47857-default-rtdb.firebaseio.com"
+});
+const db=firebase.database();
+
+/* USER */
+let id=localStorage.id||('entity_'+Math.random().toString(36).slice(2,9));
+localStorage.id=id;
+const userRef=db.ref('users/'+id);
+userRef.once('value',s=>{if(!s.exists())userRef.set({nick:id,avatar:''})});
+pid.textContent=id;
+
+/* ONLINE / LAST SEEN */
+const presence=db.ref('status/'+id);
+presence.set({online:true,last:Date.now()});
+presence.onDisconnect().set({online:false,last:Date.now()});
+
+/* PROFILE LIVE */
+let currentNick=id,currentAvatar='';
+userRef.on('value',s=>{
+ const v=s.val()||{};
+ currentNick=v.nick||id;
+ currentAvatar=v.avatar||'';
+ profileAvatar.style.backgroundImage=currentAvatar?`url(${currentAvatar})`:'';
+ document.querySelectorAll('[data-user="'+id+'"]').forEach(e=>e.textContent=currentNick);
+ document.querySelectorAll('[data-avatar="'+id+'"]').forEach(e=>{
+  e.style.backgroundImage=currentAvatar?`url(${currentAvatar})`:'';
+ });
+});
+
+function uploadAvatar(i){
+ const f=i.files[0]; if(!f)return;
+ const r=new FileReader();
+ r.onload=e=>userRef.update({avatar:e.target.result});
+ r.readAsDataURL(f);
+}
+
+/* UI */
+function togglePrivate(){privatePanel.classList.toggle('open')}
+function openProfile(){
+ overlay.style.display='block';
+ profile.style.display='block';
+ nickInput.value=currentNick;
+}
+function closeProfile(){
+ overlay.style.display='none';
+ profile.style.display='none';
+}
+function saveNick(){
+ userRef.update({nick:nickInput.value.trim()||id});
+ closeProfile();
+}
+function searchUser(){
+ const q=search.value.trim();
+ if(q&&q!==id)openPrivate(q);
+}
+
+/* CHAT */
+let mode='public',withUser=null,ref=null;
+function goPublic(){
+ mode='public';withUser=null;
+ statusLine.textContent='';
+ listen();
+}
+function openPrivate(u){
+ if(u===id)return;
+ mode='private';withUser=u;
+ privatePanel.classList.remove('open');
+ listen();
+ watchStatus();
+ watchTyping();
+}
+function listen(){
+ if(ref)ref.off();
+ messages.innerHTML='';
+ ref=mode==='public'
+  ?db.ref('rooms/hall')
+  :db.ref('private/'+[id,withUser].sort().join('__'));
+ ref.limitToLast(100).on('child_added',s=>render(s.val(),s.key));
+}
+
+/* STATUS LINE (PRIVATE ONLY) */
+function watchStatus(){
+ db.ref('status/'+withUser).on('value',s=>{
+  const v=s.val(); if(!v)return;
+  if(v.online)statusLine.textContent='онлайн';
+  else{
+   const d=new Date(v.last);
+   statusLine.textContent='был(а) в '+d.toLocaleTimeString().slice(0,5);
+  }
+ });
+}
+
+/* TYPING (PRIVATE ONLY) */
+let tmo=null;
+function typing(){
+ if(mode!=='private')return;
+ db.ref('typing/'+withUser+'/'+id).set(true);
+ clearTimeout(tmo);
+ tmo=setTimeout(()=>{
+  db.ref('typing/'+withUser+'/'+id).remove();
+ },1200);
+}
+function watchTyping(){
+ db.ref('typing/'+id).on('value',s=>{
+  if(s.exists())statusLine.textContent='печатает…';
+ });
+}
+
+/* READ STATUS (PRIVATE ONLY) */
+function markRead(key){
+ if(mode==='private')
+  db.ref('reads/'+withUser+'/'+key).set(true);
+}
+
+/* RENDER */
+function render(m,key){
+ const d=document.createElement('div');
+ d.className='msg '+(m.id===id?'me':'');
+ const time=new Date(m.time).toLocaleTimeString().slice(0,5);
+ d.innerHTML=`
+ <div class="bubble">
+  ${m.text}
+  <div class="meta" id="meta_${key}">
+   <div class="avatar" data-avatar="${m.id}"></div>
+   <span class="nick" data-user="${m.id}" onclick="openPrivate('${m.id}')">${m.id}</span>
+   · ${time}
+  </div>
+ </div>`;
+ messages.appendChild(d);
+ messages.scrollTop=messages.scrollHeight;
+
+ db.ref('users/'+m.id).once('value',s=>{
+  const u=s.val()||{};
+  d.querySelector('[data-user]').textContent=u.nick||m.id;
+  if(u.avatar)d.querySelector('[data-avatar]').style.backgroundImage=`url(${u.avatar})`;
+ });
+
+ if(m.id!==id && mode==='private')markRead(key);
+
+ if(m.id===id && mode==='private'){
+  db.ref('reads/'+id+'/'+key).on('value',s=>{
+   const meta=document.getElementById('meta_'+key);
+   if(meta)meta.innerHTML+=s.exists()?' <span class="read">✓✓</span>':' ✓';
+  });
+ }
+}
+
+/* SEND */
+function send(){
+ const t=text.value.trim();
+ if(!t)return;
+ ref.push({id,text:t,time:Date.now()});
+ text.value='';autoGrow(text);
+}
+function autoGrow(el){
+ el.style.height='auto';
+ el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+
+/* PRIVATE LIST */
+db.ref('private').on('value',snap=>{
+ privatePanel.innerHTML='<b>Личные</b><br><br>';
+ snap.forEach(c=>{
+  const users=c.key.split('__');
+  if(!users.includes(id))return;
+  const other=users.find(u=>u!==id);
+  const div=document.createElement('div');
+  div.className='pItem';
+  div.onclick=()=>openPrivate(other);
+  div.innerHTML=`
+   <div class="avatar" data-avatar="${other}"></div>
+   <div class="pName" data-user="${other}">${other}</div>`;
+  db.ref('users/'+other).once('value',s=>{
+   const u=s.val()||{};
+   div.querySelector('[data-user]').textContent=u.nick||other;
+   if(u.avatar)div.querySelector('[data-avatar]').style.backgroundImage=`url(${u.avatar})`;
+  });
+  privatePanel.appendChild(div);
+ });
+});
+
+listen();
+</script>
+
+<!-- ================= VIDEO RECORD EXTENSION (APPENDED ONLY) ================= -->
+<style>
+.videoSquare{
+ width:96px;height:96px;border-radius:12px;
+ overflow:hidden;border:2px solid #550000;
+ background:#120000;position:relative
+}
+.videoSquare video{width:100%;height:100%;object-fit:cover}
+.videoTimer{
+ position:absolute;bottom:2px;right:4px;
+ font-size:10px;color:#fff;
+ background:rgba(0,0,0,.5);
+ padding:1px 4px;border-radius:4px
+}
+.reacts{display:flex;gap:6px;font-size:13px;margin-top:2px}
+.reacts span{cursor:pointer;opacity:.7}
+.reacts span:hover{opacity:1}
+#camBtn{
+ width:34px;height:34px;border-radius:6px;
+ background:#120000;border:1px solid #b30000;
+ color:#ff6b6b;display:flex;
+ align-items:center;justify-content:center;
+ font-size:11px;user-select:none
+}
+#camBtn.rec{background:#b30000;color:#000}
+#videoPreview{
+ position:fixed;inset:0;display:none;
+ background:rgba(0,0,0,.85);z-index:20;
+ align-items:center;justify-content:center
+}
+#videoPreview video{width:160px;height:160px;object-fit:cover;border-radius:14px}
+</style>
+
+<div id="videoPreview"><video autoplay muted></video></div>
+
+<script>
+/* inject camera button */
+(function(){
+ const bar=document.getElementById('inputBar');
+ if(!bar||document.getElementById('camBtn'))return;
+ const btn=document.createElement('div');
+ btn.id='camBtn';btn.textContent='📷';
+ bar.insertBefore(btn, bar.lastElementChild);
+
+ let stream,rec,chunks=[],recording=false,timer=0,iv;
+ const preview=document.getElementById('videoPreview');
+ const pv=preview.querySelector('video');
+
+ btn.addEventListener('mousedown',start);
+ btn.addEventListener('touchstart',e=>{e.preventDefault();start()});
+ btn.addEventListener('mouseup',stop);
+ btn.addEventListener('mouseleave',stop);
+ btn.addEventListener('touchend',stop);
+
+ async function start(){
+  if(recording)return;
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:true});
+  pv.srcObject=stream;preview.style.display='flex';
+  rec=new MediaRecorder(stream,{mimeType:'video/webm'});
+  chunks=[];
+  rec.ondataavailable=e=>chunks.push(e.data);
+  rec.onstop=save;
+  rec.start();
+  recording=true;timer=0;
+  btn.classList.add('rec');btn.textContent='0s';
+  iv=setInterval(()=>{
+   timer++;btn.textContent=timer+'s';
+   if(timer>=30)stop();
+  },1000);
+ }
+
+ function stop(){
+  if(!recording)return;
+  clearInterval(iv);
+  rec.stop();
+  stream.getTracks().forEach(t=>t.stop());
+  preview.style.display='none';
+  btn.classList.remove('rec');btn.textContent='📷';
+  recording=false;
+ }
+
+ function save(){
+  if(!chunks.length)return;
+  const r=new FileReader();
+  r.onload=e=>ref.push({id,type:'video',video:e.target.result,time:Date.now(),dur:timer,reactions:{}});
+  r.readAsDataURL(new Blob(chunks,{type:'video/webm'}));
+ }
+})();
+
+/* extend render */
+(function(){
+ const old=window.render;
+ window.render=function(m,key){
+  if(m.type==='video'){
+   const d=document.createElement('div');
+   d.className='msg '+(m.id===id?'me':'');
+   const wrap=document.createElement('div');
+   wrap.className='videoSquare';
+   const v=document.createElement('video');
+   v.src=m.video;v.controls=true;
+   wrap.appendChild(v);
+   const tm=document.createElement('div');
+   tm.className='videoTimer';tm.textContent=(m.dur||0)+'s';
+   wrap.appendChild(tm);
+
+   const reacts=document.createElement('div');
+   reacts.className='reacts';
+   ['🔥','👍','❤️'].forEach(r=>{
+    const s=document.createElement('span');
+    s.textContent=r;
+    s.onclick=()=>db.ref(ref.key+'/'+key+'/reactions/'+r).transaction(v=>(v||0)+1);
+    reacts.appendChild(s);
+   });
+
+   const b=document.createElement('div');
+   b.className='bubble';
+   b.appendChild(wrap);b.appendChild(reacts);
+
+   if(m.id===id){
+    const del=document.createElement('button');
+    del.textContent='Удалить';
+    del.onclick=()=>ref.child(key).remove();
+    b.appendChild(del);
+   }
+
+   d.appendChild(b);
+   messages.appendChild(d);
+   messages.scrollTop=messages.scrollHeight;
+   return;
+  }
+  old(m,key);
+ }
+})();
+</script>
+<!-- ================= END VIDEO EXTENSION ================= -->
+
+</body>
+</html>
