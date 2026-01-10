@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>THE WATCHING — Private List, Global Nicknames</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+:root{--bg:#000;--panel:#070707;--accent:#b30000;--line:#300;--text:#e6e6e6}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--text);font-family:system-ui,monospace;overflow:hidden}
+button{background:#000;color:#ff6b6b;border:1px solid var(--accent);border-radius:12px;padding:8px 12px}
+input{background:#000;color:#eee;border:1px solid var(--line);border-radius:10px;padding:8px}
+#top{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px;background:rgba(0,0,0,.9);border-bottom:1px solid var(--line);z-index:5}
+#brand{letter-spacing:.18em;color:#ff6b6b}
+#spacer{flex:1}
+
+/* Layout */
+#wrap{position:fixed;inset:48px 0 0 0;display:flex}
+#sidebar{width:0;transition:.25s;overflow:hidden;border-right:1px solid var(--line);background:#040404}
+#sidebar.open{width:min(86vw,280px)}
+#sideHeader{padding:10px;border-bottom:1px solid var(--line);display:flex;gap:8px}
+#privateList{padding:8px;display:flex;flex-direction:column;gap:6px}
+.chatBtn{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--line);border-radius:12px;background:#060606;color:#eee}
+.chatBtn .badge{margin-left:auto;background:#b30000;color:#fff;border-radius:999px;padding:2px 6px;font-size:11px}
+.chatBtn .avatar{width:20px;height:20px;border-radius:50%}
+
+#chat{flex:1;display:flex;flex-direction:column}
+#messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:86%}
+.me{align-self:flex-end}
+.other{align-self:flex-start}
+.bubble{background:#080808;border:1px solid var(--line);border-radius:16px;padding:10px}
+.me .bubble{background:linear-gradient(180deg,#240000,#0f0000)}
+.meta{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;opacity:.85}
+.avatar{width:24px;height:24px;border-radius:50%;cursor:pointer;box-shadow:0 0 10px rgba(255,0,0,.6)}
+.nick{cursor:pointer;color:#ff9a9a}
+#inputBar{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+
+/* Eye */
+#eyeWrap{position:fixed;top:18%;left:50%;transform:translate(-50%,-50%);z-index:3}
+#eye{width:180px;height:180px;border-radius:50%;
+background:radial-gradient(circle,#fff 0%,#ffd6d6 14%,#b30000 42%,#400000 72%,#000 100%);
+box-shadow:inset 0 0 40px #700,0 0 140px #b30000;position:relative}
+#iris{position:absolute;inset:46px;border-radius:50%;background:radial-gradient(circle,#900,#000)}
+#pupil{position:absolute;inset:22px;border-radius:50%;background:#000}
+#lid{
+ position:absolute;
+ inset:-2%;
+ background:#000;
+ border-radius:50%;
+ transform-origin:50% 50%;
+ pointer-events:none;
+ animation:blink 5.5s infinite;
+}
+@keyframes blink{
+ 0%{transform:scaleY(0)}
+ 2%{transform:scaleY(0)}
+ 3%{transform:scaleY(1)}
+ 4%{transform:scaleY(0.15)}
+ 5%{transform:scaleY(0)}
+ 100%{transform:scaleY(0)}
+}
+#notify{position:absolute;top:-40px;left:50%;transform:translateX(-50%);background:#120000;border:1px solid var(--accent);padding:6px 10px;border-radius:14px;font-size:13px;opacity:0;transition:.25s}
+
+/* Panels */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;z-index:9}
+.panel{position:fixed;right:10px;top:60px;width:min(92vw,360px);background:#050505;border:1px solid var(--accent);border-radius:16px;padding:12px;display:none;z-index:10}
+.panel h3{margin:6px 0 10px 0}
+.row{display:flex;gap:8px;align-items:center}
+
+.unreadBadge{background:#b30000;color:#fff;border-radius:999px;padding:2px 6px;font-size:11px;margin-left:6px;box-shadow:0 0 8px #b30000}
+
+.statusDot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.online{background:#2aff6a;box-shadow:0 0 6px #2aff6a}
+.offline{background:#555}
+.typingBar{padding:6px 12px;border-top:1px dashed #300;font-size:12px;opacity:.85}
+
+.read{margin-left:6px;font-size:11px;opacity:.7}
+.read.ok{color:#7CFF9B}
+.lastSeen{font-size:11px;opacity:.7}
+</style>
+
+
+</head>
+<body>
+
+<div id="eyeWrap">
+  <div id="notify"></div>
+  <div id="eye"><div id="iris"><div id="pupil"></div></div><div id="lid"></div></div>
+</div>
+
+<div id="top">
+  <div id="brand">THE WATCHING</div>
+  <button onclick="goPublic()">Общий чат</button>
+  <button onclick="toggleSidebar()">Личные чаты <span id="unread" class="unreadBadge" style="display:none">0</span></button>
+  <button onclick="openProfile()">Профиль</button>
+  <div id="spacer"></div>
+</div>
+
+<div id="wrap">
+  <aside id="sidebar">
+    <div id="sideHeader">
+      <input id="search" placeholder="поиск по ID" oninput="searchUser()" style="flex:1">
+      <button onclick="toggleSidebar()">✕</button>
+    </div>
+    <div id="privateList"></div>
+  </aside>
+
+  <section id="chat">
+    <div id="messages"></div>
+    <div id="typingBar" class="typingBar" style="display:none"></div>
+    <div id="inputBar">
+      <input id="text" placeholder="сообщение">
+      <button onclick="send()">▶</button>
+    </div>
+  </section>
+</div>
+
+<div id="overlay" onclick="closePanels()"></div>
+
+<div id="profile" class="panel">
+  <h3>ПРОФИЛЬ</h3>
+  <div class="row"><b>ID:</b> <span id="origId"></span></div>
+  <div class="row" style="margin-top:8px">
+    <input id="nickInput" placeholder="Отображаемый ник">
+    <button onclick="saveNick()">Сохранить</button>
+  </div>
+  <small>Ник обновится во всех чатах.</small>
+</div>
+
+<div id="avatarView" class="panel">
+  <h3>ПОЛЬЗОВАТЕЛЬ</h3>
+  <div class="row">
+    <div class="avatar" id="avAvatar"></div>
+    <div>
+      <div id="avNick"></div>
+      <small id="avId"></small>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+const firebaseConfig={
+ apiKey:"AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
+ authDomain:"licei-47857.firebaseapp.com",
+ databaseURL:"https://licei-47857-default-rtdb.firebaseio.com",
+ projectId:"licei-47857",
+ storageBucket:"licei-47857.firebasestorage.app",
+ messagingSenderId:"693615263006",
+ appId:"1:693615263006:web:e9309536d58ae848b49d0f"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.database();
+const SV=firebase.database.ServerValue;
+
+// Identity
+let id=localStorage.getItem('entity_id');
+if(!id){id='entity_'+Math.random().toString(36).slice(2,10);localStorage.setItem('entity_id',id);}
+let nick=localStorage.getItem('display_nick')||id;
+origId.textContent=id; nickInput.value=nick;
+
+// Users map for global nick resolution
+const usersMap={}; const usersOnline={}; const usersLastSeen={};
+db.ref('users').on('value',s=>{
+ const v=s.val()||{};
+ Object.keys(v).forEach(k=>{usersMap[k]=v[k].nick||k; usersOnline[k]=!!v[k].online; usersLastSeen[k]=v[k].lastSeen||0;});
+ // refresh visible nicks
+ document.querySelectorAll('[data-uid]').forEach(el=>{
+   const uid=el.getAttribute('data-uid');
+   el.textContent = usersMap[uid]||uid;
+ });
+ renderPrivateList();
+});
+
+// Save presence + nick
+
+// Presence
+const userRef = db.ref('users/'+id);
+userRef.update({online:true});
+userRef.onDisconnect().update({online:false,lastSeen:SV.TIMESTAMP});
+
+// Typing
+let typingTimer=null;
+const TYPING_DELAY=1200;
+function setTyping(state){
+  if(mode!=='private') return;
+  const room=[id,privateWith].sort().join('__');
+  db.ref('typing/'+room+'/'+id).set(state||null);
+}
+document.getElementById('text').addEventListener('input',()=>{
+  setTyping(true);
+  if(typingTimer) clearTimeout(typingTimer);
+  typingTimer=setTimeout(()=>setTyping(false),TYPING_DELAY);
+});
+
+db.ref('users/'+id).set({nick});
+
+// Deterministic avatar from ID
+function hashCode(str){let h=0;for(let i=0;i<str.length;i++){h=((h<<5)-h)+str.charCodeAt(i);h|=0;}return Math.abs(h);}
+function avatarStyle(el, seed){
+ const h=hashCode(seed);
+ const hue=h%360, hue2=(h*7)%360;
+ el.style.background=`radial-gradient(circle at 30% 30%, hsl(${hue},90%,65%), hsl(${hue2},90%,35%))`;
+ el.style.boxShadow=`0 0 12px hsl(${hue},90%,45%)`;
+}
+
+// Eye follow
+const lid=document.getElementById('lid');
+function randomBlink(){
+  const t=3000+Math.random()*5000;
+  lid.style.animation='none';
+  lid.offsetHeight;
+  lid.style.animation='blink 0.18s cubic-bezier(.4,0,.6,1)';
+  setTimeout(randomBlink,t);
+}
+randomBlink();
+
+function follow(x,y){const dx=(x/innerWidth-.5)*24,dy=(y/innerHeight-.5)*24;iris.style.transform=`translate(${dx}px,${dy}px)`;pupil.style.transform=`translate(${dx/2}px,${dy/2}px)`}
+addEventListener('mousemove',e=>follow(e.clientX,e.clientY));
+addEventListener('touchmove',e=>{if(e.touches[0])follow(e.touches[0].clientX,e.touches[0].clientY)},{passive:true});
+
+// Chat state
+let mode='public',currentRef,privateWith=null,currentTypingRef=null;
+let unreadMap={};
+const messages=document.getElementById('messages');
+const notify=document.getElementById('notify');
+const unreadEl=document.getElementById('unread');
+
+function toggleSidebar(){ sidebar.classList.toggle('open'); }
+function goPublic(){ mode='public'; privateWith=null; toggleSidebar(false); listen(); }
+
+function updateUnread(){
+ const total=Object.values(unreadMap).reduce((a,b)=>a+b,0);
+ unreadEl.textContent=total; unreadEl.style.display=total>0?'inline-block':'none';
+}
+
+function listen(){
+ if(currentTypingRef) currentTypingRef.off();
+
+ if(currentRef) currentRef.off();
+ messages.innerHTML='';
+ currentRef = mode==='public'? db.ref('rooms/hall'): db.ref('private/'+[id,privateWith].sort().join('__'));
+ if(mode==='private'){
+   const room=[id,privateWith].sort().join('__');
+   if(lastReadRef) lastReadRef.off();
+   lastReadRef=db.ref('lastRead/'+room);
+   lastReadRef.on('value',s=>{ lastReadMap=s.val()||{}; updateReadMarks(); });
+ }
+ if(mode==='private'){
+ const room=[id,privateWith].sort().join('__');
+ currentTypingRef = db.ref('typing/'+room);
+ currentTypingRef.on('value',s=>{
+   const v=s.val()||{};
+   const others=Object.keys(v).filter(uid=>uid!==id);
+   const bar=document.getElementById('typingBar');
+   if(others.length){
+     bar.textContent=(usersMap[others[0]]||others[0])+' печатает…';
+     bar.style.display='block';
+   }else bar.style.display='none';
+ });
+}else{ document.getElementById('typingBar').style.display='none'; }
+
+ currentRef.limitToLast(200).on('child_added',s=>render(s.val()));
+}
+
+function fmtDate(t){
+ const d=new Date(t);
+ const dd=String(d.getDate()).padStart(2,'0');
+ const mm=String(d.getMonth()+1).padStart(2,'0');
+ const yy=d.getFullYear();
+ const hh=String(d.getHours()).padStart(2,'0');
+ const mi=String(d.getMinutes()).padStart(2,'0');
+ return `${dd}/${mm}/${yy} ${hh}:${mi}`;
+}
+
+function render(m){
+ const wrap=document.createElement('div');
+ wrap.className='msg '+(m.id===id?'me':'other');
+ wrap.innerHTML=`
+  <div class="bubble">
+    <div>${m.text}</div>
+    <div class="meta">
+      <div class="avatar"></div>
+      <div class="nick" data-uid="${m.id}">${usersMap[m.id]||m.id}</div>
+      <small data-time='${m.time}'>${fmtDate(m.time)}</small>${mode==='private' && m.id===id ? `<span class='read ${ (lastReadMap && lastReadMap[privateWith] && lastReadMap[privateWith]>=m.time)?'ok':'' }'>✓✓</span>`:''}
+    </div>
+  </div>`;
+ const av=wrap.querySelector('.avatar');
+ avatarStyle(av,m.id);
+ av.onclick=()=>showAvatar(usersMap[m.id]||m.id,m.id);
+ wrap.querySelector('.nick').onclick=()=>openPrivate(m.id);
+ messages.appendChild(wrap);
+ messages.scrollTop=messages.scrollHeight; updateReadMarks();
+}
+
+function openPrivate(otherId){
+ if(otherId===id) return;
+ privateWith=otherId; mode='private';
+ unreadMap[otherId]=0; updateUnread();
+ const room=[id,privateWith].sort().join('__');
+ db.ref('lastRead/'+room+'/'+id).set(Date.now());
+ listen();
+ toggleSidebar(false);
+}
+
+function send(){
+ const t=text.value.trim(); if(!t) return;
+ currentRef.push({id, text:t, time:Date.now()});
+ text.value='';
+}
+
+// Private list builder
+function renderPrivateList(){
+ const list=document.getElementById('privateList');
+ list.innerHTML='';
+ Object.keys(unreadMap).forEach(uid=>{
+   const btn=document.createElement('button');
+   btn.className='chatBtn';
+   btn.innerHTML=`<div class="avatar"></div><span class="statusDot ${usersOnline[uid]?'online':'offline'}"></span><div>${usersMap[uid]||uid}</div><div class="lastSeen">${usersOnline[uid]?'онлайн':(usersLastSeen[uid]?`был(а) ${new Date(usersLastSeen[uid]).toLocaleString('ru-RU')}`:'')}</div>`;
+   avatarStyle(btn.querySelector('.avatar'),uid);
+   if(unreadMap[uid]>0){
+     const b=document.createElement('span'); b.className='badge'; b.textContent=unreadMap[uid]; btn.appendChild(b);
+   }
+   btn.onclick=()=>openPrivate(uid);
+   list.appendChild(btn);
+ });
+}
+
+// Listen private notifications
+db.ref('private').on('child_added',chat=>{
+ chat.ref.limitToLast(1).on('child_added',s=>{
+  const m=s.val(), users=chat.key.split('__');
+  if(users.includes(id)&&m.id!==id){
+    unreadMap[m.id]=(unreadMap[m.id]||0)+1; updateUnread();
+    renderPrivateList();
+    notify.textContent=(usersMap[m.id]||m.id)+' написал вам сообщение';
+    notify.style.opacity=1; setTimeout(()=>notify.style.opacity=0,2500);
+  }
+ });
+});
+
+// Profile
+function openProfile(){overlay.style.display='block';profile.style.display='block'}
+function saveNick(){
+ nick=nickInput.value||id;
+ localStorage.setItem('display_nick',nick);
+ db.ref('users/'+id).update({nick});
+ closePanels();
+}
+
+// Avatar modal
+function showAvatar(n,i){
+ overlay.style.display='block';avatarView.style.display='block';
+ avNick.textContent=n; avId.textContent=i;
+ avatarStyle(avAvatar,i);
+}
+
+// Search
+function searchUser(){
+ const q=search.value.trim(); if(!q) return;
+ db.ref('users/'+q).once('value',s=>{ if(s.exists()) openPrivate(q); });
+}
+
+function closePanels(){overlay.style.display='none';profile.style.display='none';avatarView.style.display='none'}
+
+function updateReadMarks(){
+ if(mode!=='private') return;
+ document.querySelectorAll('.msg.me .read').forEach(el=>{
+   el.classList.toggle('ok', lastReadMap && lastReadMap[privateWith] && Number(el.closest('.msg').querySelector('small').dataset?.time)<=lastReadMap[privateWith]);
+ });
+}
+// Init
+listen();
+</script>
+</body>
+</html>
