@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>THE WATCHING — Profile & Avatars</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+:root{--bg:#000;--panel:#070707;--accent:#b30000;--line:#300;--text:#e6e6e6}
+*{box-sizing:border-box}
+body{margin:0;background:#000;color:var(--text);font-family:system-ui,monospace;overflow:hidden}
+button{background:#000;color:#ff6b6b;border:1px solid var(--accent);border-radius:12px;padding:8px 12px}
+input{background:#000;color:#eee;border:1px solid var(--line);border-radius:10px;padding:8px}
+#top{position:fixed;top:0;left:0;right:0;display:flex;align-items:center;gap:8px;padding:8px;background:rgba(0,0,0,.9);border-bottom:1px solid var(--line);z-index:5}
+#brand{letter-spacing:.18em;color:#ff6b6b}
+#spacer{flex:1}
+#chat.shifted{left:240px}
+#chat{position:fixed;left:0;right:0;bottom:0;height:60vh;display:flex;flex-direction:column;border-top:1px solid var(--line);background:rgba(0,0,0,.92)}
+#messages{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:86%}
+.me{align-self:flex-end}
+.other{align-self:flex-start}
+.bubble{background:#080808;border:1px solid var(--line);border-radius:16px;padding:10px}
+.me .bubble{background:linear-gradient(180deg,#240000,#0f0000)}
+.meta{display:flex;align-items:center;gap:8px;margin-top:6px;font-size:12px;opacity:.8}
+.avatar{width:22px;height:22px;border-radius:50%;background:radial-gradient(circle,#ff6b6b,#700);box-shadow:0 0 8px #700;cursor:pointer}
+.nick{cursor:pointer;color:#ff9a9a}
+#inputBar{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}
+/* Eye */
+#eyeWrap{position:fixed;top:18%;left:50%;transform:translate(-50%,-50%);z-index:3}
+#eye{width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,#fff 0%,#ffd6d6 14%,#b30000 42%,#400000 72%,#000 100%);box-shadow:inset 0 0 40px #700,0 0 140px #b30000;position:relative}
+#iris{position:absolute;inset:46px;border-radius:50%;background:radial-gradient(circle,#900,#000)}
+#pupil{position:absolute;inset:22px;border-radius:50%;background:#000}
+#lid{position:absolute;inset:0;background:#000;border-radius:50%;transform:scaleY(0);animation:blink 6s infinite}
+@keyframes blink{0%,95%,100%{transform:scaleY(0)}96%{transform:scaleY(1)}}
+#notify{position:absolute;top:-40px;left:50%;transform:translateX(-50%);background:#120000;border:1px solid var(--accent);padding:6px 10px;border-radius:14px;font-size:13px;opacity:0;transition:.25s}
+/* Panels */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;z-index:9}
+.panel{position:fixed;right:10px;top:60px;width:min(92vw,360px);background:#050505;border:1px solid var(--accent);border-radius:16px;padding:12px;display:none;z-index:10}
+.panel h3{margin:6px 0 10px 0}
+.row{display:flex;gap:8px;align-items:center}
+.list{max-height:40vh;overflow:auto;border-top:1px solid var(--line);margin-top:8px;padding-top:8px}
+.user{display:flex;gap:8px;align-items:center;padding:6px;border-bottom:1px dashed #200}
+
+.unreadBadge{
+  background:#b30000;color:#fff;border-radius:999px;
+  padding:2px 6px;font-size:11px;margin-left:6px;
+  box-shadow:0 0 8px #b30000
+}
+
+#privatePanel{
+  position:fixed;
+  transform:translateX(-100%);
+  transition:transform .3s;
+  top:56px;
+  left:0;
+  width:240px;
+  height:calc(100dvh - 56px);
+  background:#040404;
+  border-right:1px solid #300;
+  z-index:4;
+  overflow:auto;
+}
+#privatePanel.open{transform:translateX(0)}
+.pp-head{
+  padding:10px;
+  text-align:center;
+  color:#ff6b6b;
+  border-bottom:1px solid #300;
+  letter-spacing:2px;
+}
+.privateUser{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  padding:8px;
+  border-bottom:1px dashed #200;
+  cursor:pointer;
+}
+.privateUser:hover{background:#120000}
+
+</style>
+
+</head>
+<body>
+<div id="eyeWrap">
+  <div id="notify"></div>
+  <div id="eye"><div id="iris"><div id="pupil"></div></div><div id="lid"></div></div>
+</div>
+
+<div id="top">
+  <div id="brand">THE WATCHING</div>
+  <button onclick="goPublic()">Общий чат</button> <button onclick="togglePrivatePanel()">Личные чаты</button>
+  
+  <button onclick="openProfile()">Профиль</button>
+  <div id="spacer"></div>
+  <input id="search" placeholder="поиск по ID" oninput="searchUser()">
+</div>
+
+
+<!-- PRIVATE CHATS PANEL -->
+<div id="privatePanel">
+  <div class="pp-head">ЛИЧНЫЕ ЧАТЫ</div>
+  <div id="privateList"></div>
+</div>
+
+
+<div id="chat">
+  <div id="messages"></div>
+  <div id="inputBar">
+    <input id="text" placeholder="сообщение">
+    <button onclick="send()">▶</button>
+  </div>
+</div>
+
+<div id="overlay" onclick="closePanels()"></div>
+
+<div id="profile" class="panel">
+  <h3>ПРОФИЛЬ</h3>
+  <div class="row"><b>ID:</b> <span id="origId"></span></div>
+  <div class="row" style="margin-top:8px">
+    <input id="nickInput" placeholder="Отображаемый ник">
+    <button onclick="saveNick()">Сохранить</button>
+  </div>
+  <small>Ваш ID неизменяем. Ник — отображаемое имя.</small>
+</div>
+
+<div id="avatarView" class="panel">
+  <h3>ПОЛЬЗОВАТЕЛЬ</h3>
+  <div class="row"><div class="avatar"></div><div><div id="avNick"></div><small id="avId"></small></div></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js">
+function addPrivateUser(uid,nick){
+ if(privateUsers.has(uid) || uid===id) return;
+ privateUsers.add(uid);
+ const div=document.createElement('div');
+ div.className='privateUser';
+ div.innerHTML=`<div class="avatar"></div><div>${nick||uid}</div>`;
+ div.onclick=()=>{ openPrivate(uid); privatePanel.classList.remove('open'); chatBox.classList.remove('shifted'); };
+ privateList.prepend(div);
+}
+
+</script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js">
+function addPrivateUser(uid,nick){
+ if(privateUsers.has(uid) || uid===id) return;
+ privateUsers.add(uid);
+ const div=document.createElement('div');
+ div.className='privateUser';
+ div.innerHTML=`<div class="avatar"></div><div>${nick||uid}</div>`;
+ div.onclick=()=>{ openPrivate(uid); privatePanel.classList.remove('open'); chatBox.classList.remove('shifted'); };
+ privateList.prepend(div);
+}
+
+</script>
+<script>
+const firebaseConfig={
+ apiKey:"AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
+ authDomain:"licei-47857.firebaseapp.com",
+ databaseURL:"https://licei-47857-default-rtdb.firebaseio.com",
+ projectId:"licei-47857",
+ storageBucket:"licei-47857.firebasestorage.app",
+ messagingSenderId:"693615263006",
+ appId:"1:693615263006:web:e9309536d58ae848b49d0f"
+};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.database();
+
+// Identity
+let id=localStorage.getItem('entity_id');
+if(!id){id='entity_'+Math.random().toString(36).slice(2,10);localStorage.setItem('entity_id',id);}
+let nick=localStorage.getItem('display_nick')||id;
+document.getElementById('origId').textContent=id;
+document.getElementById('nickInput').value=nick;
+
+// Eye follow
+function follow(x,y){const dx=(x/innerWidth-.5)*24,dy=(y/innerHeight-.5)*24;iris.style.transform=`translate(${dx}px,${dy}px)`;pupil.style.transform=`translate(${dx/2}px,${dy/2}px)`}
+addEventListener('mousemove',e=>follow(e.clientX,e.clientY));
+addEventListener('touchmove',e=>{if(e.touches[0])follow(e.touches[0].clientX,e.touches[0].clientY)},{passive:true});
+
+// Chat
+let mode='public',currentRef,privateWith=null;
+let lastPrivate=null;
+let unreadMap = {}; const unreadEl=document.getElementById('unread');
+const privateUsers=new Set();
+const privateList=document.getElementById('privateList');
+const privatePanel=document.getElementById('privatePanel');
+const chatBox=document.getElementById('chat');
+function togglePrivatePanel(){
+ privatePanel.classList.toggle('open');
+ chatBox.classList.toggle('shifted');
+}
+
+function updateUnread(){
+  const total = Object.values(unreadMap).reduce((a,b)=>a+b,0);
+  unreadEl.textContent=total;
+  unreadEl.style.display = total>0 ? 'inline-block':'none';
+}
+function goPrivate(){
+  if(lastPrivate){
+    unreadMap[lastPrivate]=0; updateUnread();
+    mode='private'; privateWith=lastPrivate; listen();
+  }
+}
+const messages=document.getElementById('messages');
+const notify=document.getElementById('notify');
+
+function goPublic(){mode='public';privateWith=null;listen();}
+
+function listen(){
+ if(currentRef) currentRef.off();
+ messages.innerHTML='';
+ currentRef = mode==='public'? db.ref('rooms/hall'): db.ref('private/'+[id,privateWith].sort().join('__'));
+ currentRef.limitToLast(150).on('child_added',s=>render(s.val()));
+}
+
+function render(m){
+ const wrap=document.createElement('div');
+ wrap.className='msg '+(m.id===id?'me':'other');
+ wrap.innerHTML=`
+  <div class="bubble">
+    <div>${m.text}</div>
+    <div class="meta">
+      <div class="avatar" onclick="showAvatar('${m.nick}','${m.id}')"></div>
+      <div class="nick" onclick="openPrivate('${m.id}')">${m.nick}</div>
+      <small>${(()=>{const d=new Date(m.time);const dd=String(d.getDate()).padStart(2,'0');const mm=String(d.getMonth()+1).padStart(2,'0');const yy=d.getFullYear();const hh=String(d.getHours()).padStart(2,'0');const mi=String(d.getMinutes()).padStart(2,'0');return `${dd}/${mm}/${yy} ${hh}:${mi}`;})()}</small>
+    </div>
+  </div>`;
+ messages.appendChild(wrap);
+ messages.scrollTop=messages.scrollHeight;
+}
+
+function openPrivate(otherId){ addPrivateUser(otherId, usersMap?.[otherId]);
+ if(otherId===id) return;
+ lastPrivate=otherId;
+ unreadMap[otherId]=0; updateUnread();
+ mode='private'; privateWith=otherId; listen();
+}
+
+function send(){
+ const t=text.value.trim(); if(!t) return;
+ currentRef.push({id, nick, text:t, time:Date.now()});
+ text.value='';
+}
+
+// Notifications for private
+db.ref('private').on('child_added',chat=>{
+ chat.ref.limitToLast(1).on('child_added',s=>{
+  const m=s.val(), users=chat.key.split('__');
+  if(users.includes(id)&&m.id!==id && (mode!=='private'||privateWith!==m.id)){
+    addPrivateUser(m.id,m.nick);
+    unreadMap[m.id]=(unreadMap[m.id]||0)+1; updateUnread();
+    lastPrivate=m.id;
+    notify.textContent=m.nick+' написал вам сообщение';
+    notify.style.opacity=1; setTimeout(()=>notify.style.opacity=0,2500);
+  }
+ });
+});
+
+// Profile
+function openProfile(){overlay.style.display='block';profile.style.display='block'}
+function saveNick(){nick=nickInput.value||id;localStorage.setItem('display_nick',nick);closePanels()}
+
+// Avatar modal
+function showAvatar(n,i){
+ overlay.style.display='block';avatarView.style.display='block';
+ avNick.textContent=n; avId.textContent=i;
+}
+
+// Search users by ID
+function searchUser(){
+ const q=search.value.trim(); if(!q) return;
+ db.ref('users/'+q).once('value',s=>{
+   if(s.exists()){openPrivate(q)}
+ });
+}
+
+// Presence index
+db.ref('users/'+id).set(true);
+
+function closePanels(){overlay.style.display='none';profile.style.display='none';avatarView.style.display='none'}
+
+listen();
+
+function addPrivateUser(uid,nick){
+ if(privateUsers.has(uid) || uid===id) return;
+ privateUsers.add(uid);
+ const div=document.createElement('div');
+ div.className='privateUser';
+ div.innerHTML=`<div class="avatar"></div><div>${nick||uid}</div>`;
+ div.onclick=()=>{ openPrivate(uid); privatePanel.classList.remove('open'); chatBox.classList.remove('shifted'); };
+ privateList.prepend(div);
+}
+
+</script>
+</body>
+</html>
