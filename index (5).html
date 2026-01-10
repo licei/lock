@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>THE WATCHING — Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<style>
+:root{
+ --bg:#000;--panel:#060606;--accent:#b30000;
+ --line:#300;--text:#e6e6e6;--muted:#777
+}
+*{box-sizing:border-box}
+body{
+ margin:0;background:#000;color:var(--text);
+ font-family:system-ui,monospace;overflow:hidden
+}
+#left{
+ position:fixed;left:0;top:0;bottom:0;width:240px;
+ background:#050505;border-right:1px solid var(--line);
+ padding:10px;overflow:auto;
+ transition:.25s;z-index:10
+}
+#left.hidden{transform:translateX(-100%)}
+.chatItem{
+ display:flex;gap:8px;padding:6px;
+ border-bottom:1px dashed #200;cursor:pointer
+}
+.chatItem:hover{background:#100}
+.avatar{
+ width:32px;height:32px;border-radius:50%;
+ background:radial-gradient(circle,#ff6b6b,#600);
+ box-shadow:0 0 6px #600
+}
+.chatMeta{flex:1}
+.chatName{font-size:14px}
+.status{font-size:11px;color:#777}
+#top{
+ position:fixed;left:240px;right:0;top:0;
+ padding:8px;background:#000;border-bottom:1px solid #300;
+ display:flex;gap:8px;align-items:center;z-index:9
+}
+#menuBtn{display:none}
+button{
+ background:#000;color:#ff6b6b;border:1px solid #b30000;
+ border-radius:12px;padding:6px 10px
+}
+#chat{
+ position:fixed;left:240px;right:0;top:48px;bottom:0;
+ display:flex;flex-direction:column
+}
+#messages{flex:1;overflow:auto;padding:12px}
+.msg{max-width:82%;margin-bottom:10px}
+.me{margin-left:auto}
+.bubble{
+ background:#080808;border:1px solid #300;
+ border-radius:14px;padding:8px
+}
+.meta{font-size:11px;color:#888;margin-top:4px}
+#typing{font-size:12px;color:#ff6b6b;padding:4px 12px}
+#inputBar{
+ display:flex;gap:8px;padding:10px;
+ border-top:1px solid #300
+}
+input{
+ flex:1;background:#000;color:#eee;
+ border:1px solid #300;
+ border-radius:10px;padding:10px;font-size:16px
+}
+@media(max-width:800px){
+ #left{width:220px}
+ #left.hidden{transform:translateX(-220px)}
+ #top{left:0}
+ #chat{left:0}
+ #menuBtn{display:inline-block}
+}
+</style>
+</head>
+<body>
+
+<div id="left" class="hidden"></div>
+
+<div id="top">
+ <button id="menuBtn" onclick="toggleMenu()">☰</button>
+ <b>THE WATCHING</b>
+ <button onclick="goPublic()">Общий чат</button>
+</div>
+
+<div id="chat">
+ <div id="messages"></div>
+ <div id="typing"></div>
+ <div id="inputBar">
+  <input id="text" placeholder="сообщение" oninput="typing()">
+  <button onclick="send()">▶</button>
+ </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+ apiKey:"AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
+ databaseURL:"https://licei-47857-default-rtdb.firebaseio.com"
+});
+const db=firebase.database();
+let id=localStorage.id||('entity_'+Math.random().toString(36).slice(2,9));
+localStorage.id=id;
+let nick=localStorage.nick||id;
+localStorage.nick=nick;
+let mode='public',withUser=null,ref=null;
+const messages=document.getElementById('messages');
+const left=document.getElementById('left');
+const typingEl=document.getElementById('typing');
+function toggleMenu(){left.classList.toggle('hidden');}
+const uRef=db.ref('users/'+id);
+uRef.set({nick,online:true,last:Date.now()});
+uRef.onDisconnect().set({nick,online:false,last:Date.now()});
+db.ref('private').on('value',snap=>{
+ left.innerHTML='<b>Личные чаты</b><br><br>';
+ snap.forEach(c=>{
+  const users=c.key.split('__');
+  if(!users.includes(id))return;
+  const other=users.find(u=>u!==id);
+  db.ref('users/'+other).once('value',u=>{
+   const d=u.val()||{};
+   const div=document.createElement('div');
+   div.className='chatItem';
+   div.onclick=()=>{openPrivate(other);if(innerWidth<800)toggleMenu();};
+   div.innerHTML=`
+    <div class="avatar"></div>
+    <div class="chatMeta">
+     <div class="chatName">${d.nick||other}</div>
+     <div class="status">${d.online?'🟢 в сети':'⚫ был(а) в сети '+time(d.last)}</div>
+    </div>`;
+   left.appendChild(div);
+  });
+ });
+});
+function listen(){
+ if(ref)ref.off();
+ messages.innerHTML='';typingEl.textContent='';
+ ref = mode==='public'?db.ref('rooms/hall'):db.ref('private/'+[id,withUser].sort().join('__'));
+ ref.limitToLast(100).on('child_added',s=>render(s.val()));
+ if(mode==='private'){
+  db.ref('typing/'+withUser+'_'+id).on('value',s=>{
+   typingEl.textContent=s.val()?`${withUser} печатает…`:'';
+  });
+ }
+}
+function render(m){
+ const d=document.createElement('div');
+ d.className='msg '+(m.id===id?'me':'');
+ d.innerHTML=`<div class="bubble">${m.text}<div class="meta">${new Date(m.time).toLocaleTimeString()}</div></div>`;
+ messages.appendChild(d);messages.scrollTop=messages.scrollHeight;
+}
+function send(){
+ const t=text.value.trim();if(!t)return;
+ ref.push({id,nick,text:t,time:Date.now()});
+ text.value='';typing(false);
+}
+function typing(v=true){
+ if(mode!=='private')return;
+ const p=db.ref('typing/'+id+'_'+withUser);
+ v?p.set(true):p.remove();setTimeout(()=>p.remove(),2000);
+}
+function openPrivate(u){mode='private';withUser=u;listen();}
+function goPublic(){mode='public';withUser=null;listen();}
+function time(ts){
+ if(!ts)return'';const d=new Date(ts);
+ return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+}
+listen();
+</script>
+</body>
+</html>
