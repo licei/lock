@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>THE WATCHING — Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{
+ --bg:#000;
+ --panel:#070707;
+ --accent:#b30000;
+ --line:#300;
+ --text:#e6e6e6;
+ --my1:#2a0000;
+ --my2:#120000;
+}
+*{box-sizing:border-box}
+body{
+ margin:0;background:#000;color:var(--text);
+ font-family:system-ui,monospace;overflow:hidden
+}
+
+/* TOP */
+#top{
+ position:fixed;top:0;left:0;right:0;
+ display:flex;align-items:center;gap:8px;
+ padding:8px;background:#000;border-bottom:1px solid var(--line);z-index:5
+}
+#centerSearch{flex:1;text-align:center}
+#centerSearch input{
+ width:220px;background:#000;color:#eee;
+ border:1px solid var(--line);border-radius:10px;padding:6px
+}
+button{
+ background:#000;color:#ff6b6b;
+ border:1px solid var(--accent);
+ border-radius:10px;padding:6px 10px
+}
+
+/* PROFILE */
+#overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;z-index:9}
+#profile{
+ position:fixed;top:60px;right:10px;width:260px;
+ background:#050505;border:1px solid var(--accent);
+ border-radius:14px;padding:12px;display:none;z-index:10
+}
+
+/* PRIVATE PANEL */
+#privatePanel{
+ position:fixed;top:48px;left:0;bottom:0;width:200px;
+ background:#050505;border-right:1px solid var(--line);
+ transform:translateX(-100%);transition:.25s;z-index:4;
+ padding:8px;overflow:auto
+}
+#privatePanel.open{transform:translateX(0)}
+.pItem{display:flex;gap:6px;padding:6px;border-bottom:1px dashed #200;cursor:pointer}
+.pItem:hover{background:#120000}
+.avatar{
+ width:26px;height:26px;border-radius:50%;
+ background-size:cover;background-position:center
+}
+
+/* CHAT */
+#chat{
+ position:fixed;left:0;right:0;bottom:0;top:48px;
+ display:flex;flex-direction:column
+}
+#messages{flex:1;overflow:auto;padding:14px}
+
+/* MESSAGE */
+.msg{
+ max-width:78%;
+ margin-bottom:12px;
+ display:flex;
+}
+.msg.me{
+ margin-left:auto;
+ justify-content:flex-end;
+}
+.bubble{
+ position:relative;
+ background:#080808;
+ border:1px solid var(--line);
+ border-radius:16px;
+ padding:10px 12px;
+ animation:fade .25s ease;
+}
+.msg.me .bubble{
+ background:linear-gradient(180deg,var(--my1),var(--my2));
+ border:1px solid #550000;
+ box-shadow:
+  0 0 12px rgba(179,0,0,.25),
+  inset 0 0 12px rgba(0,0,0,.6);
+}
+
+/* bubble tail */
+.msg.me .bubble:after{
+ content:'';
+ position:absolute;
+ right:-6px;bottom:8px;
+ width:12px;height:12px;
+ background:linear-gradient(135deg,var(--my1),var(--my2));
+ transform:rotate(45deg);
+ border-right:1px solid #550000;
+ border-bottom:1px solid #550000;
+}
+
+.meta{
+ font-size:11px;
+ color:#aaa;
+ margin-top:6px;
+ text-align:right;
+}
+.nick{cursor:pointer;color:#ff9a9a}
+
+@keyframes fade{
+ from{opacity:0;transform:translateY(4px)}
+ to{opacity:1;transform:none}
+}
+
+/* INPUT */
+#inputBar{
+ display:flex;gap:8px;padding:10px;
+ border-top:1px solid var(--line)
+}
+input{
+ flex:1;background:#000;color:#eee;
+ border:1px solid var(--line);
+ border-radius:12px;padding:10px;font-size:15px
+}
+</style>
+</head>
+<body>
+
+<div id="top">
+ <button onclick="togglePrivate()">☰</button>
+ <button onclick="goPublic()">Общий</button>
+
+ <div id="centerSearch">
+  <input id="search" placeholder="поиск по ID" onkeydown="if(event.key==='Enter')searchUser()">
+ </div>
+
+ <button onclick="openProfile()">Профиль</button>
+</div>
+
+<div id="privatePanel"></div>
+
+<div id="chat">
+ <div id="messages"></div>
+ <div id="inputBar">
+  <input id="text" placeholder="сообщение">
+  <button onclick="send()">▶</button>
+ </div>
+</div>
+
+<div id="overlay" onclick="closeProfile()"></div>
+<div id="profile">
+ <b>Профиль</b><br><br>
+ <div><small>ID (неизменяемый)</small><br><b id="pid"></b></div><br>
+ <div><small>Отображаемый ник</small></div>
+ <input id="nickInput">
+ <button onclick="saveNick()">Сохранить</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
+ apiKey:"AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
+ databaseURL:"https://licei-47857-default-rtdb.firebaseio.com"
+});
+const db=firebase.database();
+
+let id=localStorage.id||('entity_'+Math.random().toString(36).slice(2,9));
+localStorage.id=id;
+
+const userRef=db.ref('users/'+id);
+userRef.once('value',s=>{if(!s.exists())userRef.set({nick:id})});
+
+let currentNick=id;
+userRef.on('value',s=>{
+ currentNick=s.val()?.nick||id;
+ document.querySelectorAll('[data-user="'+id+'"]').forEach(e=>e.textContent=currentNick);
+});
+
+pid.textContent=id;
+
+function avatarUrl(uid){
+ return `https://api.dicebear.com/7.x/bottts/svg?seed=${uid}`;
+}
+
+/* UI */
+function togglePrivate(){privatePanel.classList.toggle('open')}
+function openProfile(){
+ overlay.style.display='block';
+ profile.style.display='block';
+ nickInput.value=currentNick;
+}
+function closeProfile(){
+ overlay.style.display='none';
+ profile.style.display='none';
+}
+function saveNick(){
+ const n=nickInput.value.trim()||id;
+ userRef.update({nick:n});
+ closeProfile();
+}
+
+/* SEARCH */
+function searchUser(){
+ const q=search.value.trim();
+ if(!q||q===id)return;
+ openPrivate(q);
+}
+
+/* CHAT */
+let mode='public',withUser=null,ref=null;
+function goPublic(){mode='public';withUser=null;listen()}
+function openPrivate(u){
+ if(u===id)return;
+ mode='private';withUser=u;
+ privatePanel.classList.remove('open');
+ listen();
+}
+
+function listen(){
+ if(ref)ref.off();
+ messages.innerHTML='';
+ ref = mode==='public'
+  ? db.ref('rooms/hall')
+  : db.ref('private/'+[id,withUser].sort().join('__'));
+ ref.limitToLast(100).on('child_added',s=>render(s.val()));
+}
+
+function render(m){
+ const d=document.createElement('div');
+ d.className='msg '+(m.id===id?'me':'');
+ const dt=new Date(m.time);
+ d.innerHTML=`
+ <div class="bubble">
+  ${m.text}
+  <div class="meta">
+   <span class="nick" data-user="${m.id}" onclick="openPrivate('${m.id}')">${m.id}</span>
+   · ${dt.toLocaleDateString()} ${dt.toLocaleTimeString()}
+  </div>
+ </div>`;
+ messages.appendChild(d);
+ messages.scrollTop=messages.scrollHeight;
+
+ db.ref('users/'+m.id+'/nick').once('value',s=>{
+  d.querySelector('[data-user]').textContent=s.val()||m.id;
+ });
+}
+
+function send(){
+ const t=text.value.trim(); if(!t)return;
+ ref.push({id,text:t,time:Date.now()});
+ text.value='';
+}
+
+/* PRIVATE LIST */
+db.ref('private').on('value',snap=>{
+ privatePanel.innerHTML='<b>Личные чаты</b><br><br>';
+ snap.forEach(c=>{
+  const users=c.key.split('__');
+  if(!users.includes(id))return;
+  const other=users.find(u=>u!==id);
+  const div=document.createElement('div');
+  div.className='pItem';
+  div.onclick=()=>openPrivate(other);
+  div.innerHTML=`
+   <div class="avatar" style="background-image:url('${avatarUrl(other)}')"></div>
+   <div data-user="${other}">${other}</div>`;
+  db.ref('users/'+other+'/nick').once('value',s=>{
+    div.querySelector('[data-user]').textContent=s.val()||other;
+  });
+  privatePanel.appendChild(div);
+ });
+});
+
+listen();
+</script>
+</body>
+</html>
