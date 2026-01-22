@@ -328,5 +328,69 @@ db.ref('private').on('value',snap=>{
 
 listen();
 </script>
+<style>
+#bgMark{
+ position:fixed;
+ inset:0;
+ display:flex;
+ align-items:center;
+ justify-content:center;
+ font-size:64px;
+ font-weight:700;
+ letter-spacing:4px;
+ color:rgba(255,255,255,0.03);
+ pointer-events:none;
+ z-index:0;
+ user-select:none
+}
+body.light{
+ --bg:#f5f5f5;
+ --panel:#ffffff;
+ --accent:#b30000;
+ --line:#ddd;
+ --text:#111;
+ --my1:#ffd6d6;
+ --my2:#ffb3b3;
+ background:#f5f5f5;
+ color:#111
+}
+body.light button,
+body.light textarea,
+body.light input{
+ background:#fff;
+ color:#111
+}
+</style>
+
+<div id="bgMark">by argon</div>
+
+<script>
+(function(){
+ const prof=document.getElementById('profile');
+ if(!prof)return;
+
+ const block=document.createElement('div');
+ block.style.marginTop='10px';
+ block.innerHTML=`
+ <hr style="border:0;border-top:1px solid var(--line)">
+ <b>Тема</b><br><br>
+ <button id="darkBtn">Тёмная</button>
+ <button id="lightBtn">Светлая</button>
+ `;
+ prof.appendChild(block);
+
+ const saved=localStorage.theme||'dark';
+ if(saved==='light')document.body.classList.add('light');
+
+ document.getElementById('darkBtn').onclick=()=>{
+  document.body.classList.remove('light');
+  localStorage.theme='dark';
+ };
+ document.getElementById('lightBtn').onclick=()=>{
+  document.body.classList.add('light');
+  localStorage.theme='light';
+ };
+})();
+</script>
 </body>
 </html>
