@@ -140,9 +140,152 @@ textarea{
  <button onclick="saveNick()">Сохранить</button>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.
+ 0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
+// === ДОБАВЛЕНО: СИСТЕМА УВЕДОМЛЕНИЙ ===
+let audioNotification = null;
+let notificationPermission = false;
+let originalTitle = document.title;
+let flashInterval = null;
+let lastMessageTime = 0;
+
+// Инициализация аудио
+function initAudio() {
+    try {
+        // Используем стандартный звук уведомления
+        audioNotification = new Audio('data:audio/ogg;base64,T2dnUwACAAAAAAAAAADhqW5KAAAAAMFvEjUBHgF2b3JiaXMAAAAAAYC7AAAAAAAAAHcBAAAAAAC4AU9nZ1MAAAAAAAAAAAAA4aluSgEAAAAA+5K/AQEAAAD4//7/0AB1bmI0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARhd3MAAAAAAAAAAAAA4aluSgEAAAAA+5K/AQMAAAAAAAAAAAAAAA==');
+        audioNotification.preload = 'auto';
+    } catch(e) {
+        console.log("Аудио не инициализировано");
+    }
+}
+
+// Запрос разрешения на уведомления
+function requestNotificationPermission() {
+    if (!("Notification" in window)) return;
+    
+    if (Notification.permission === "granted") {
+        notificationPermission = true;
+    } else if (Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+            notificationPermission = permission === "granted";
+            if (notificationPermission) {
+                console.log("Уведомления разрешены");
+            }
+        });
+    }
+}
+
+// Воспроизведение звука уведомления
+function playNotification() {
+    if (!audioNotification) initAudio();
+    if (audioNotification) {
+        try {
+            audioNotification.currentTime = 0;
+            audioNotification.play().catch(e => {
+                console.log("Автовоспроизведение звука заблокировано");
+            });
+        } catch(e) {
+            console.log("Ошибка воспроизведения звука");
+        }
+    }
+}
+
+// Мигание заголовка при новых сообщениях
+function startTitleFlash() {
+    if (flashInterval) clearInterval(flashInterval);
+    
+    let isFlashing = false;
+    flashInterval = setInterval(() => {
+        document.title = isFlashing ? originalTitle : '● Новое сообщение';
+        isFlashing = !isFlashing;
+    }, 1000);
+}
+
+// Остановка мигания заголовка
+function stopTitleFlash() {
+    if (flashInterval) {
+        clearInterval(flashInterval);
+        flashInterval = null;
+    }
+    document.title = originalTitle;
+}
+
+// Показать браузерное уведомление
+function showBrowserNotification(senderName, messageText) {
+    if (!notificationPermission || !document.hidden) return;
+    
+    try {
+        const notification = new Notification("THE WATCHING", {
+            body: ${senderName}: ${messageText.substring(0, 50)}${messageText.length > 50 ? '...' : ''},
+            icon: 'https://cdn-icons-png.flaticon.com/512/4712/4712035.png',
+            tag: 'chat-message',
+            silent: false
+        });
+        
+        notification.onclick = function() {
+            window.focus();
+            this.close();
+        };
+        
+        setTimeout(() => notification.close(), 5000);
+    } catch(e) {
+        console.log("Ошибка создания уведомления");
+    }
+}
+
+// Проверка на новые сообщения и вызов уведомлений
+function checkForNewMessage(message, senderId) {
+    // Проверяем, не наше ли это сообщение
+    if (senderId === id) return;
+    
+    const currentTime = Date.now();
+    
+    // Защита от спама уведомлений (минимум 3 секунды между уведомлениями)
+    if (currentTime - lastMessageTime < 3000) return;
+    lastMessageTime = currentTime;
+    
+    // Если окно не активно или свернуто
+    if (document.hidden) {
+        // Звуковое уведомление
+        playNotification();
+        
+        // Мигание заголовка
+        if (!document.hasFocus()) {
+            startTitleFlash();
+        }
+        
+        // Браузерное уведомление
+        if (notificationPermission) {
+            const senderName = message.nick || senderId;
+            showBrowserNotification(senderName, message.text);
+        }
+    }
+}
+
+// Обработчик изменения видимости страницы
+document.
+ addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        stopTitleFlash();
+    }
+});
+
+// Обработчик фокуса окна
+window.addEventListener('focus', function() {
+    stopTitleFlash();
+});
+
+// Инициализация системы уведомлений при загрузке
+setTimeout(() => {
+    initAudio();
+    requestNotificationPermission();
+    originalTitle = document.title;
+}, 1000);
+// === КОНЕЦ ДОБАВЛЕННОГО КОДА УВЕДОМЛЕНИЙ ===
+
 firebase.initializeApp({
  apiKey:"AIzaSyCbKw_YRxf38AxxqcKMfIvg9KqDTQxKzTU",
  databaseURL:"https://licei-47857-default-rtdb.firebaseio.com"
@@ -261,6 +404,10 @@ function markRead(key){
 
 /* RENDER */
 function render(m,key){
+ // === ДОБАВЛЕНО: Проверка на новое сообщение для уведомлений ===
+ checkForNewMessage(m, m.id);
+ // === КОНЕЦ ДОБАВЛЕНИЯ ===
+ 
  const d=document.createElement('div');
  d.className='msg '+(m.id===id?'me':'');
  const time=new Date(m.time).toLocaleTimeString().slice(0,5);
@@ -276,7 +423,8 @@ function render(m,key){
  messages.appendChild(d);
  messages.scrollTop=messages.scrollHeight;
 
- db.ref('users/'+m.id).once('value',s=>{
+ db.ref('users/'+m.id).
+  once('value',s=>{
   const u=s.val()||{};
   d.querySelector('[data-user]').textContent=u.nick||m.id;
   if(u.avatar)d.querySelector('[data-avatar]').style.backgroundImage=`url(${u.avatar})`;
